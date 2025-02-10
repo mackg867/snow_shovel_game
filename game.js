@@ -18,7 +18,7 @@ const START_COLOR = { r: 200, g: 230, b: 255 };
 
 let energySpent = 0;
 let gameOver = false;
-let pushMode = false; // Tracks whether the next movement should push snow
+let pushMode = false; // remains active until the user toggles it off
 
 // Grid initialization
 let grid = Array.from({ length: GRID_HEIGHT }, (_, y) =>
@@ -31,7 +31,7 @@ let grid = Array.from({ length: GRID_HEIGHT }, (_, y) =>
 
 let player = { x: 1, y: 1, holding: 0 };
 
-// Helpers
+// Helpers for color interpolation
 function getInterpolatedColor(count, maxThreshold, startColor) {
   let ratio = Math.min(count, maxThreshold) / maxThreshold;
   const r = Math.round(startColor.r * (1 - ratio) + DEEP_BLUE.r * ratio);
@@ -127,11 +127,13 @@ function updateGame() {
     ctx.font = "30px Arial";
     ctx.textAlign = "center";
     ctx.fillText("You Win!", canvas.width / 2, canvas.height / 2);
-    document.getElementById("energyCounter").innerText = `Final Energy: ${Math.round(energySpent * 10) / 10}`;
+    document.getElementById("energyCounter").innerText = 
+      `Final Energy: ${Math.round(energySpent * 10) / 10}`;
   } else {
-    document.getElementById("energyCounter").innerText = `Energy Spent: ${Math.round(energySpent * 10) / 10}`;
+    document.getElementById("energyCounter").innerText = 
+      `Energy Spent: ${Math.round(energySpent * 10) / 10}`;
   }
-  updateUIControls(); // Update button states
+  updateUIControls();
 }
 
 // Movement
@@ -223,6 +225,7 @@ function pushSnow(dx, dy) {
     const spill = newAmount - MAX_SHOVEL_CAPACITY;
     grid[destY][destX] = MAX_SHOVEL_CAPACITY;
     
+    // Spill logic
     if (dx !== 0 && dy === 0) {
       let aboveValid = (destY - 1 >= minY);
       let belowValid = (destY + 1 <= maxY);
@@ -254,17 +257,16 @@ function pushSnow(dx, dy) {
   
   energySpent += sourceSnow;
   
-  // Move player onto the pushed cell
+  // The player moves onto the source cell
   player.x = srcX;
   player.y = srcY;
   updateGame();
 }
 
-// Handle move or push based on pushMode
+// Move or push based on pushMode (no auto-disable)
 function handleMove(dx, dy) {
   if (pushMode) {
     pushSnow(dx, dy);
-    pushMode = false; // Automatically turn off push mode
   } else {
     movePlayer(dx, dy);
   }
@@ -280,16 +282,16 @@ document.getElementById("shovelBtn").addEventListener("click", shovelSnow);
 document.getElementById("throwBtn").addEventListener("click", throwSnow);
 document.getElementById("pushBtn").addEventListener("click", () => {
   pushMode = !pushMode; 
-  updateUIControls(); // Refresh button states so user sees push toggled
+  updateUIControls();
 });
 
-// Disable/enable buttons based on conditions
+// Disable/enable buttons
 function updateUIControls() {
   document.getElementById("shovelBtn").disabled = !canShovel();
-  document.getElementById("throwBtn").disabled  = !canThrow();
-  document.getElementById("pushBtn").disabled   = !canPush();
+  document.getElementById("throwBtn").disabled = !canThrow();
+  document.getElementById("pushBtn").disabled  = !canPush();
   
-  // If pushMode is active, highlight push button (optional)
+  // Highlight push button if active
   document.getElementById("pushBtn").style.backgroundColor = pushMode ? "#ffcccc" : "";
 }
 
@@ -302,13 +304,13 @@ function canShovel() {
 function canThrow() {
   if (gameOver) return false;
   if (player.holding <= 0) return false;
-  // Must be on an edge (left/right/bottom of driveway)
+  // Must be on an edge (driveway boundary)
   return (player.x === 1 || player.x === GRID_WIDTH - 2 || player.y === GRID_HEIGHT - 2);
 }
 
 function canPush() {
   if (gameOver) return false;
-  // Example rule: not allowed if currently holding snow
+  // For example: if holding snow, we can’t push
   if (player.holding > 0) return false;
   return true;
 }
