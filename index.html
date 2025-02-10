@@ -2,30 +2,34 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <!-- Make the game fit the screen size and remove the default zoom -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
   <title>Snow Shoveling Game (Mobile)</title>
   <style>
+    /* Add some margin/padding to get white space at the edges */
     body {
+      margin: 10px;
+      padding: 10px;
       text-align: center;
       font-family: Arial, sans-serif;
-      margin: 0; 
-      padding: 0;
     }
+    /* Make the canvas responsive, but don’t exceed its natural 480px width */
     #gameCanvas {
       border: 1px solid black;
+      width: 100%;
+      max-width: 480px; 
+      height: auto; /* maintain aspect ratio */
       display: block;
       margin: 0 auto;
     }
-    #controls {
-      margin-top: 10px;
+    /* Increase button size for easier tapping */
+    button {
+      font-size: 24px;
+      padding: 12px;
+      margin: 6px;
     }
     .dpad-row {
       margin: 5px 0;
-    }
-    button {
-      font-size: 18px;
-      padding: 8px;
-      margin: 3px;
     }
   </style>
 </head>
