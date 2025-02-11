@@ -2,61 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <!-- Make the game fit the screen size and remove the default zoom -->
+  <title>Snow Shoveling Game - Landing</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
-  <title>Snow Shoveling Game (Mobile)</title>
   <style>
-    /* Add some margin/padding to get white space at the edges */
     body {
       margin: 10px;
       padding: 10px;
       text-align: center;
       font-family: Arial, sans-serif;
     }
-    /* Make the canvas responsive, but don’t exceed its natural 480px width */
-    #gameCanvas {
-      border: 1px solid black;
-      width: 100%;
-      max-width: 480px; 
-      height: auto; /* maintain aspect ratio */
-      display: block;
-      margin: 0 auto;
-    }
-    /* Increase button size for easier tapping */
     button {
       font-size: 24px;
       padding: 12px;
       margin: 6px;
     }
-    .dpad-row {
-      margin: 5px 0;
-    }
   </style>
 </head>
 <body>
-  <h1>Snow Shoveling Game</h1>
-  <p id="energyCounter">Energy Spent: 0</p>
-  <canvas id="gameCanvas" width="480" height="480"></canvas>
-  
-  <!-- On-screen controls -->
-  <div id="controls">
-    <!-- D-Pad -->
-    <div class="dpad-row">
-      <button id="upBtn">↑</button>
-    </div>
-    <div class="dpad-row">
-      <button id="leftBtn">←</button>
-      <button id="downBtn">↓</button>
-      <button id="rightBtn">→</button>
-    </div>
-    <!-- Actions -->
-    <div class="dpad-row">
-      <button id="shovelBtn">Shovel</button>
-      <button id="throwBtn">Throw</button>
-      <button id="pushBtn">Push</button>
-    </div>
-  </div>
-  
-  <script src="game.js"></script>
+  <h1>Welcome to the Snow Shoveling Game</h1>
+  <p>Choose an option:</p>
+  <button onclick="window.location.href='game.html';">Start Game</button>
+  <button onclick="window.location.href='rules.html';">Game Rules</button>
 </body>
 </html>
