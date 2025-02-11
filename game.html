@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Ensures proper scaling on mobile -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+  <title>Snow Shoveling Game</title>
+  <style>
+    body {
+      margin: 10px;
+      padding: 10px;
+      text-align: center;
+      font-family: Arial, sans-serif;
+    }
+    /* Make the canvas responsive, maxing out at 480px wide */
+    #gameCanvas {
+      border: 1px solid black;
+      width: 100%;
+      max-width: 480px;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+    }
+    button {
+      font-size: 24px;
+      padding: 12px;
+      margin: 6px;
+    }
+    .dpad-row {
+      margin: 5px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Snow Shoveling Game</h1>
+  <p id="energyCounter">Energy Spent: 0</p>
+  <canvas id="gameCanvas" width="480" height="480"></canvas>
+  
+  <!-- On-screen controls -->
+  <div id="controls">
+    <!-- D-Pad -->
+    <div class="dpad-row">
+      <button id="upBtn">↑</button>
+    </div>
+    <div class="dpad-row">
+      <button id="leftBtn">←</button>
+      <button id="downBtn">↓</button>
+      <button id="rightBtn">→</button>
+    </div>
+    <!-- Actions -->
+    <div class="dpad-row">
+      <button id="shovelBtn">Shovel</button>
+      <button id="throwBtn">Throw</button>
+      <button id="pushBtn">Push</button>
+    </div>
+  </div>
+  
+  <script>
+    /*****************************************************
+     *              SNOW SHOVEL GAME SCRIPT
+     *****************************************************/
+
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const TILE_SIZE = 40;
+    const GRID_WIDTH = 12;  // columns
+    const GRID_HEIGHT = 12; // rows
+
+    // Colors
+    const CLEAR_COLOR      = "gray";    // driveways with 0 snow
+    const GARAGE_COLOR     = "black";
+    const DISPOSAL_EMPTY   = "#ffcccc"; // disposal blocks with 0 snow
+    const PLAYER_COLOR     = "blue";
+    
+    // For the gradient from light blue to dark blue
+    const START_COLOR = { r: 200, g: 230, b: 255 }; // lightish blue
+    const DEEP_BLUE   = { r: 0,   g: 0,   b: 139 }; // darkest color
+    // We cap the gradient at 15 units
+    const MAX_GRADIENT_SNOW = 15;
+
+    let energySpent = 0;
+    let gameOver = false;
+    let pushMode = false; // Toggle for push
+
+    // The grid: 
+    // row=0 => garage, 
+    // row=1..(GRID_HEIGHT-2) and col=1..(GRID_WIDTH-2) => driveway w/ initial snow=1
+    // else => disposal zone w/ initial snow=0
+    let grid = Array.from({ length: GRID_HEIGHT }, (_, y) =>
+      Array.from({ length: GRID_WIDTH }, (_, x) => {
+        if (y === 0) return 2; // Garage
+        if (y >= 1 && y <= GRID_HEIGHT - 2 && x >= 1 && x <= GRID_WIDTH - 2) {
+          return 1; // driveway snow
+        }
+        return 0; // disposal
+      })
+    );
+
+    // Player always starts at (1,1) with empty shovel
+    let player = { x: 1, y: 1, holding: 0 };
+
+    /********************
+     *   COLOR HELPER   *
+     ********************/
+    function getInterpolatedColor(count) {
+      // If exactly 1 unit => white
+      if (count === 1) return "white";
+      if (count <= 0) return "white";
+
+      // Cap at 15 for darkest color
+      const capped = Math.min(count, MAX_GRADIENT_SNOW);
+      const ratio = capped / MAX_GRADIENT_SNOW; // 0..1
+
+      const r = Math.round(START_COLOR.r * (1 - ratio) + DEEP_BLUE.r * ratio);
+      const g = Math.round(START_COLOR.g * (1 - ratio) + DEEP_BLUE.g * ratio);
+      const b = Math.round(START_COLOR.b * (1 - ratio) + DEEP_BLUE.b * ratio);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    /***********************
+     *   ZONE IDENTIFIER   *
+     ***********************/
+    function getZone(x, y) {
+      if (y === 0) return "garage";
+      if (y === GRID_HEIGHT - 1) return "bottom";
+      if (x === 0) return "left";
+      if (x === GRID_WIDTH - 1) return "right";
+      return "driveway";
+    }
+
+    /**************************
+     *   DRAWING THE SCENE    *
+     **************************/
+    function drawGrid() {
+      for (let y = 0; y < GRID_HEIGHT; y++) {
+        for (let x = 0; x < GRID_WIDTH; x++) {
+          const zone = getZone(x, y);
+          let cellVal = grid[y][x];
+          let fillColor = CLEAR_COLOR; // default for driveway if 0
+
+          if (zone === "garage") {
+            fillColor = GARAGE_COLOR;
+          }
+          else if (zone === "driveway") {
+            if (cellVal === 0) fillColor = CLEAR_COLOR; // 0 snow
+            else fillColor = getInterpolatedColor(cellVal);
+          }
+          else {
+            // Disposal zone
+            if (cellVal === 0) {
+              // 0 snow => light red
+              fillColor = DISPOSAL_EMPTY;
+            } else {
+              // If 1 => white, if more => gradient
+              fillColor = getInterpolatedColor(cellVal);
+            }
+          }
+
+          ctx.fillStyle = fillColor;
+          ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+          // Outline
+          if (zone === "left" || zone === "right" || zone === "bottom") {
+            ctx.strokeStyle = "white";
+          } else {
+            ctx.strokeStyle = "black";
+          }
+          ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+      }
+
+      // Disposal borders
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 2;
+      // left disposal
+      ctx.strokeRect(0, TILE_SIZE, TILE_SIZE, (GRID_HEIGHT - 2) * TILE_SIZE);
+      // right disposal
+      ctx.strokeRect((GRID_WIDTH - 1) * TILE_SIZE, TILE_SIZE, TILE_SIZE, (GRID_HEIGHT - 2) * TILE_SIZE);
+      // bottom disposal
+      ctx.strokeRect(TILE_SIZE, (GRID_HEIGHT - 1) * TILE_SIZE, (GRID_WIDTH - 2) * TILE_SIZE, TILE_SIZE);
+      ctx.lineWidth = 1;
+
+      // "Garage" label in row 0
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+      ctx.textAlign = "center";
+      const garageWidth = (GRID_WIDTH - 2) * TILE_SIZE;
+      ctx.fillText("Garage", (TILE_SIZE + garageWidth / 2), TILE_SIZE / 1.5);
+    }
+
+    function drawPlayer() {
+      ctx.fillStyle = PLAYER_COLOR;
+      ctx.fillRect(
+        player.x * TILE_SIZE + 5,
+        player.y * TILE_SIZE + 5,
+        TILE_SIZE - 10,
+        TILE_SIZE - 10
+      );
+    }
+
+    /****************************
+     *   CHECK WIN CONDITION    *
+     ****************************/
+    function checkWinCondition() {
+      // Win if all driveway squares are 0
+      for (let y = 1; y <= GRID_HEIGHT - 2; y++) {
+        for (let x = 1; x <= GRID_WIDTH - 2; x++) {
+          if (grid[y][x] > 0) return false;
+        }
+      }
+      gameOver = true;
+      return true;
+    }
+
+    /***********************
+     *   UPDATE THE GAME   *
+     ***********************/
+    function updateGame() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawGrid();
+      drawPlayer();
+      if (gameOver) {
+        ctx.fillStyle = "red";
+        ctx.font = "30px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("You Win!", canvas.width / 2, canvas.height / 2);
+        document.getElementById("energyCounter").innerText = 
+          `Final Energy: ${Math.round(energySpent * 10) / 10}`;
+      } else {
+        document.getElementById("energyCounter").innerText = 
+          `Energy Spent: ${Math.round(energySpent * 10) / 10}`;
+      }
+      updateUIControls();
+    }
+
+    /********************************
+     *   MOVEMENT & PLAYER ACTIONS  *
+     ********************************/
+    function movePlayer(dx, dy) {
+      if (gameOver) return;
+      const newX = player.x + dx;
+      const newY = player.y + dy;
+      // Must remain in driveway (1..(GRID_WIDTH-2), 1..(GRID_HEIGHT-2))
+      if (newX >= 1 && newX <= GRID_WIDTH - 2 && newY >= 1 && newY <= GRID_HEIGHT - 2) {
+        let moveCost = player.holding > 0 ? player.holding : 1;
+        player.x = newX;
+        player.y = newY;
+        energySpent += moveCost;
+        updateGame();
+      }
+    }
+
+    function shovelSnow() {
+      if (gameOver) return;
+      let cellSnow = grid[player.y][player.x];
+      // If there's snow and we have capacity, we can shovel
+      const MAX_SHOVEL_CAPACITY = 3;
+      if (cellSnow > 0 && player.holding < MAX_SHOVEL_CAPACITY) {
+        const capacityLeft = MAX_SHOVEL_CAPACITY - player.holding;
+        const shoveled = Math.min(cellSnow, capacityLeft);
+        grid[player.y][player.x] -= shoveled;
+        player.holding += shoveled;
+        energySpent += shoveled;
+        updateGame();
+        if (checkWinCondition()) updateGame();
+      }
+    }
+
+    function throwSnow() {
+      if (gameOver) return;
+      if (player.holding > 0) {
+        // Must be on the driveway edge to throw
+        let pileX = player.x;
+        let pileY = player.y;
+        if (player.x === 1) {
+          pileX = 0; 
+        } else if (player.x === GRID_WIDTH - 2) {
+          pileX = GRID_WIDTH - 1;
+        } else if (player.y === GRID_HEIGHT - 2) {
+          pileY = GRID_HEIGHT - 1;
+        } else {
+          // Not on an edge => do nothing
+          return;
+        }
+        // Dump snow
+        grid[pileY][pileX] += player.holding;
+        energySpent += Math.pow(player.holding, 1.5);
+        player.holding = 0;
+        updateGame();
+      }
+    }
+
+    /*********************************
+     *        FIXED PUSH LOGIC       *
+     *********************************/
+    function pushSnow(dx, dy) {
+      if (gameOver) return;
+
+      // Only allow straight pushes
+      if (dx !== 0 && dy !== 0) return; // Diagonal => do nothing
+
+      const minX = 1, maxX = GRID_WIDTH - 2;
+      const minY = 1, maxY = GRID_HEIGHT - 2;
+
+      const srcX = player.x + dx;
+      const srcY = player.y + dy;
+      const destX = player.x + 2 * dx;
+      const destY = player.y + 2 * dy;
+
+      // If pushing off the driveway, do nothing
+      if (
+        srcX < minX || srcX > maxX ||
+        srcY < minY || srcY > maxY ||
+        destX < minX || destX > maxX ||
+        destY < minY || destY > maxY
+      ) {
+        return;
+      }
+
+      let sourceSnow = grid[srcY][srcX];
+      let destSnow   = grid[destY][destX];
+      if (sourceSnow <= 0) {
+        return; // No snow to push
+      }
+
+      // 1) Move ALL source snow to dest (temporarily)
+      //    The source cell is now empty.
+      grid[srcY][srcX] = 0; 
+      let total = sourceSnow + destSnow;
+
+      // 2) If total <= 3, no overflow
+      const SHOVEL_LIMIT = 3;
+      if (total <= SHOVEL_LIMIT) {
+        grid[destY][destX] = total;
+      } else {
+        // 3) Overflow scenario
+        grid[destY][destX] = SHOVEL_LIMIT;    // The destination now has 3
+        let spill = total - SHOVEL_LIMIT;     // The rest is "spill"
+        
+        // Figure out which 2 adjacent squares to spill into
+        let spillTargets = [];
+
+        if (dx !== 0) {
+          // Horizontal push => spill up/down
+          const upY   = destY - 1;
+          const downY = destY + 1;
+          // Check if up is a valid driveway cell
+          if (upY >= minY && upY <= maxY) {
+            const zoneAbove = getZone(destX, upY);
+            if (zoneAbove === "driveway") spillTargets.push({ x: destX, y: upY });
+          }
+          // Check if down is a valid driveway cell
+          if (downY >= minY && downY <= maxY) {
+            const zoneBelow = getZone(destX, downY);
+            if (zoneBelow === "driveway") spillTargets.push({ x: destX, y: downY });
+          }
+        } else if (dy !== 0) {
+          // Vertical push => spill left/right
+          const leftX  = destX - 1;
+          const rightX = destX + 1;
+          // Check if left is a valid driveway cell
+          if (leftX >= minX && leftX <= maxX) {
+            const zoneLeft = getZone(leftX, destY);
+            if (zoneLeft === "driveway") spillTargets.push({ x: leftX, y: destY });
+          }
+          // Check if right is a valid driveway cell
+          if (rightX >= minX && rightX <= maxX) {
+            const zoneRight = getZone(rightX, destY);
+            if (zoneRight === "driveway") spillTargets.push({ x: rightX, y: destY });
+          }
+        }
+
+        // 4) Distribute spill
+        if (spillTargets.length === 2) {
+          // Split evenly
+          let half = spill / 2;
+          grid[spillTargets[0].y][spillTargets[0].x] += half;
+          grid[spillTargets[1].y][spillTargets[1].x] += half;
+        } else if (spillTargets.length === 1) {
+          // All goes to one target
+          grid[spillTargets[0].y][spillTargets[0].x] += spill;
+        } 
+        // If spillTargets.length === 0, do nothing => snow is "lost"
+      }
+
+      // 5) Pushing cost => equals the sourceSnow we just moved
+      energySpent += sourceSnow;
+
+      // 6) The player steps onto src
+      player.x = srcX;
+      player.y = srcY;
+
+      updateGame();
+    }
+
+    function handleMove(dx, dy) {
+      if (pushMode) {
+        pushSnow(dx, dy);
+      } else {
+        movePlayer(dx, dy);
+      }
+    }
+
+    /**************************
+     *   BUTTON EVENT SETUP   *
+     **************************/
+    document.getElementById("upBtn").addEventListener("click", () => handleMove(0, -1));
+    document.getElementById("downBtn").addEventListener("click", () => handleMove(0, 1));
+    document.getElementById("leftBtn").addEventListener("click", () => handleMove(-1, 0));
+    document.getElementById("rightBtn").addEventListener("click", () => handleMove(1, 0));
+
+    document.getElementById("shovelBtn").addEventListener("click", shovelSnow);
+    document.getElementById("throwBtn").addEventListener("click", throwSnow);
+    document.getElementById("pushBtn").addEventListener("click", () => {
+      pushMode = !pushMode;
+      updateUIControls();
+    });
+
+    /*********************************
+     *   DISABLE / ENABLE CONTROLS   *
+     *********************************/
+    function updateUIControls() {
+      document.getElementById("shovelBtn").disabled = !canShovel();
+      document.getElementById("throwBtn").disabled  = !canThrow();
+      document.getElementById("pushBtn").disabled   = !canPush();
+
+      // Highlight the "Push" button if active
+      document.getElementById("pushBtn").style.backgroundColor = pushMode ? "#ffdddd" : "";
+    }
+
+    function canShovel() {
+      if (gameOver) return false;
+      let cellSnow = grid[player.y][player.x];
+      const MAX_SHOVEL_CAPACITY = 3;
+      // If there's snow and we have capacity
+      return (cellSnow > 0 && player.holding < MAX_SHOVEL_CAPACITY);
+    }
+
+    function canThrow() {
+      if (gameOver) return false;
+      if (player.holding <= 0) return false;
+      // Must be on an edge
+      return (
+        player.x === 1 || 
+        player.x === GRID_WIDTH - 2 || 
+        player.y === GRID_HEIGHT - 2
+      );
+    }
+
+    function canPush() {
+      if (gameOver) return false;
+      // For example: not allowed if holding snow
+      return (player.holding === 0);
+    }
+
+    /**************************
+     *   INITIALIZE THE GAME  *
+     **************************/
+    updateGame();
+  </script>
+</body>
+</html>
