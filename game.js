@@ -5,46 +5,46 @@ const TILE_SIZE = 40;
 const GRID_WIDTH = 12;
 const GRID_HEIGHT = 12;
 
+// Colors
 const PLAYER_COLOR = "blue";
-const SNOW_COLOR = "white";
-const CLEAR_COLOR = "gray";
+const SNOW_COLOR   = "white";
+const CLEAR_COLOR  = "gray";
 const GARAGE_COLOR = "black";
+const DISPOSAL_COLOR = "#ffcccc"; // lighter red for disposal area
 
 const MAX_SHOVEL_CAPACITY = 3;
 const COMMON_MAX_THRESHOLD = 15;
 
-const DEEP_BLUE = { r: 0, g: 0, b: 139 };
-const START_COLOR = { r: 200, g: 230, b: 255 };
-
 let energySpent = 0;
 let gameOver = false;
-let pushMode = false; // remains active until the user toggles it off
+let pushMode = false; // toggle stays active until user disables
 
 // Grid initialization
 let grid = Array.from({ length: GRID_HEIGHT }, (_, y) =>
   Array.from({ length: GRID_WIDTH }, (_, x) => {
     if (y === 0) return 2; // Garage
-    if (y >= 1 && y <= GRID_HEIGHT - 2 && x >= 1 && x <= GRID_WIDTH - 2) return 1; // Snow
+    if (y >= 1 && y <= GRID_HEIGHT - 2 && x >= 1 && x <= GRID_WIDTH - 2) {
+      return 1; // Snow
+    }
     return 0; // Disposal
   })
 );
 
 let player = { x: 1, y: 1, holding: 0 };
 
-// Helpers for color interpolation
-function getInterpolatedColor(count, maxThreshold, startColor) {
-  let ratio = Math.min(count, maxThreshold) / maxThreshold;
-  const r = Math.round(startColor.r * (1 - ratio) + DEEP_BLUE.r * ratio);
-  const g = Math.round(startColor.g * (1 - ratio) + DEEP_BLUE.g * ratio);
-  const b = Math.round(startColor.b * (1 - ratio) + DEEP_BLUE.b * ratio);
-  return `rgb(${r}, ${g}, ${b})`;
-}
-function getDisposalPileColor(count) {
-  return getInterpolatedColor(count, COMMON_MAX_THRESHOLD, START_COLOR);
-}
+// Simple color logic
 function getDrivewayPileColor(count) {
-  return getInterpolatedColor(count, COMMON_MAX_THRESHOLD, START_COLOR);
+  // You can keep your original interpolation if you want
+  if (count === 1) return SNOW_COLOR;
+  // For bigger piles, we can just darken slightly, or do your existing logic
+  return SNOW_COLOR; 
 }
+
+function getDisposalPileColor(count) {
+  // Instead of interpolation, we always return this lighter red
+  return DISPOSAL_COLOR;
+}
+
 function getZone(x, y) {
   if (y === 0) return "garage";
   if (y === GRID_HEIGHT - 1) return "bottom";
@@ -53,7 +53,7 @@ function getZone(x, y) {
   return "driveway";
 }
 
-// Drawing
+// Draw the grid + player
 function drawGrid() {
   for (let y = 0; y < GRID_HEIGHT; y++) {
     for (let x = 0; x < GRID_WIDTH; x++) {
@@ -64,17 +64,20 @@ function drawGrid() {
         fillColor = GARAGE_COLOR;
       } else if (zone === "driveway") {
         let cellValue = grid[y][x];
-        if (cellValue === 0) fillColor = CLEAR_COLOR;
-        else if (cellValue === 1) fillColor = SNOW_COLOR;
-        else fillColor = getDrivewayPileColor(cellValue);
+        fillColor = cellValue > 1 ? getDrivewayPileColor(cellValue) :
+                    cellValue === 1 ? SNOW_COLOR : CLEAR_COLOR;
       } else {
+        // Disposal areas
         fillColor = grid[y][x] > 0 ? getDisposalPileColor(grid[y][x]) : CLEAR_COLOR;
       }
       
       ctx.fillStyle = fillColor;
       ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
       
-      ctx.strokeStyle = (zone === "left" || zone === "right" || zone === "bottom") ? "white" : "black";
+      // White border around disposal, black border otherwise
+      ctx.strokeStyle = (zone === "left" || zone === "right" || zone === "bottom")
+        ? "white"
+        : "black";
       ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
     }
   }
@@ -82,18 +85,16 @@ function drawGrid() {
   // Disposal borders
   ctx.strokeStyle = "black";
   ctx.lineWidth = 2;
-  ctx.strokeRect(0, TILE_SIZE, TILE_SIZE, (GRID_HEIGHT - 2) * TILE_SIZE);
+  ctx.strokeRect(0, TILE_SIZE, TILE_SIZE, (GRID_HEIGHT - 2) * TILE_SIZE); 
   ctx.strokeRect((GRID_WIDTH - 1) * TILE_SIZE, TILE_SIZE, TILE_SIZE, (GRID_HEIGHT - 2) * TILE_SIZE);
   ctx.strokeRect(TILE_SIZE, (GRID_HEIGHT - 1) * TILE_SIZE, (GRID_WIDTH - 2) * TILE_SIZE, TILE_SIZE);
   ctx.lineWidth = 1;
   
   // "Garage" label
-  const garageX = TILE_SIZE;
-  const garageWidth = (GRID_WIDTH - 2) * TILE_SIZE;
   ctx.fillStyle = "white";
   ctx.font = "20px Arial";
   ctx.textAlign = "center";
-  ctx.fillText("Garage", garageX + garageWidth / 2, TILE_SIZE / 1.5);
+  ctx.fillText("Garage", (TILE_SIZE + (GRID_WIDTH-2)*TILE_SIZE)/2, TILE_SIZE/1.5);
 }
 
 function drawPlayer() {
@@ -106,7 +107,6 @@ function drawPlayer() {
   );
 }
 
-// Win condition
 function checkWinCondition() {
   for (let y = 1; y <= GRID_HEIGHT - 2; y++) {
     for (let x = 1; x <= GRID_WIDTH - 2; x++) {
@@ -117,7 +117,6 @@ function checkWinCondition() {
   return true;
 }
 
-// Master update
 function updateGame() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawGrid();
@@ -141,8 +140,9 @@ function movePlayer(dx, dy) {
   if (gameOver) return;
   const newX = player.x + dx;
   const newY = player.y + dy;
+  // Must remain in driveway
   if (newX >= 1 && newX <= GRID_WIDTH - 2 && newY >= 1 && newY <= GRID_HEIGHT - 2) {
-    let moveCost = (player.holding > 0) ? player.holding : 1;
+    let moveCost = player.holding > 0 ? player.holding : 1;
     player.x = newX;
     player.y = newY;
     energySpent += moveCost;
@@ -155,8 +155,8 @@ function shovelSnow() {
   if (gameOver) return;
   let cellSnow = grid[player.y][player.x];
   if (cellSnow > 0 && player.holding < MAX_SHOVEL_CAPACITY) {
-    const availableCapacity = MAX_SHOVEL_CAPACITY - player.holding;
-    const shoveled = Math.min(cellSnow, availableCapacity);
+    const capacity = MAX_SHOVEL_CAPACITY - player.holding;
+    const shoveled = Math.min(cellSnow, capacity);
     grid[player.y][player.x] -= shoveled;
     player.holding += shoveled;
     energySpent += shoveled;
@@ -171,6 +171,8 @@ function throwSnow() {
   if (player.holding > 0) {
     let pileX = player.x;
     let pileY = player.y;
+    
+    // Must be on a driveway edge
     if (player.x === 1) {
       pileX = 0; 
     } else if (player.x === GRID_WIDTH - 2) {
@@ -178,7 +180,7 @@ function throwSnow() {
     } else if (player.y === GRID_HEIGHT - 2) {
       pileY = GRID_HEIGHT - 1;
     } else {
-      alert("You can only throw snow on a driveway edge!");
+      // Not on an edge, do nothing
       return;
     }
     grid[pileY][pileX] += player.holding;
@@ -199,20 +201,19 @@ function pushSnow(dx, dy) {
   const destX = player.x + 2 * dx;
   const destY = player.y + 2 * dy;
   
+  // If pushing off the driveway, do nothing (silently fail)
   if (
     srcX < minX || srcX > maxX ||
     srcY < minY || srcY > maxY ||
     destX < minX || destX > maxX ||
     destY < minY || destY > maxY
   ) {
-    alert("Cannot push snow off the driveway!");
-    return;
+    return; 
   }
   
   let sourceSnow = grid[srcY][srcX];
   if (sourceSnow <= 0) {
-    alert("No snow to push!");
-    return;
+    return; // nothing to push
   }
   
   let destSnow = grid[destY][destX];
@@ -249,7 +250,7 @@ function pushSnow(dx, dy) {
         grid[destY][destX + 1] += spill;
       }
     } else {
-      alert("Diagonal pushes are not allowed!");
+      // Diagonal pushes not allowed, silently ignore
       return;
     }
     grid[srcY][srcX] = 0;
@@ -257,13 +258,12 @@ function pushSnow(dx, dy) {
   
   energySpent += sourceSnow;
   
-  // The player moves onto the source cell
+  // The player moves onto the pushed tile
   player.x = srcX;
   player.y = srcY;
   updateGame();
 }
 
-// Move or push based on pushMode (no auto-disable)
 function handleMove(dx, dy) {
   if (pushMode) {
     pushSnow(dx, dy);
@@ -281,20 +281,21 @@ document.getElementById("rightBtn").addEventListener("click", () => handleMove(1
 document.getElementById("shovelBtn").addEventListener("click", shovelSnow);
 document.getElementById("throwBtn").addEventListener("click", throwSnow);
 document.getElementById("pushBtn").addEventListener("click", () => {
-  pushMode = !pushMode; 
+  pushMode = !pushMode;
   updateUIControls();
 });
 
-// Disable/enable buttons
+// Disable or enable buttons based on conditions
 function updateUIControls() {
   document.getElementById("shovelBtn").disabled = !canShovel();
-  document.getElementById("throwBtn").disabled = !canThrow();
-  document.getElementById("pushBtn").disabled  = !canPush();
+  document.getElementById("throwBtn").disabled  = !canThrow();
+  document.getElementById("pushBtn").disabled   = !canPush();
   
   // Highlight push button if active
-  document.getElementById("pushBtn").style.backgroundColor = pushMode ? "#ffcccc" : "";
+  document.getElementById("pushBtn").style.backgroundColor = pushMode ? "#ffdddd" : "";
 }
 
+// Conditions for each action
 function canShovel() {
   if (gameOver) return false;
   let cellSnow = grid[player.y][player.x];
@@ -303,17 +304,15 @@ function canShovel() {
 
 function canThrow() {
   if (gameOver) return false;
-  if (player.holding <= 0) return false;
-  // Must be on an edge (driveway boundary)
-  return (player.x === 1 || player.x === GRID_WIDTH - 2 || player.y === GRID_HEIGHT - 2);
+  return (player.holding > 0 &&
+    (player.x === 1 || player.x === GRID_WIDTH - 2 || player.y === GRID_HEIGHT - 2));
 }
 
 function canPush() {
   if (gameOver) return false;
-  // For example: if holding snow, we can’t push
-  if (player.holding > 0) return false;
-  return true;
+  // e.g. not allowed if holding snow
+  return (player.holding === 0);
 }
 
-// Start
+// Initialize
 updateGame();
